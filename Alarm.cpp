@@ -85,8 +85,10 @@ void loop() {
 		bip();  //bip if read
 		switched = false;  //disable next read for 2 sec
 		dump_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size); //write card to local variable
-		int wynik = compareCards(read_card);  //check if card is valid
-		Serial.println(wynik);
+	//	deleteCard(read_card);
+				int wynik = compareCards(read_card);  //check if card is valid
+				writeCard(read_card);
+		    Serial.println(wynik);
 	}
 
 }
@@ -170,5 +172,29 @@ bool writeCard(code card) {
 		return true;  //card was written successfully
 	} else {
 		return false;  //card was not written (card already existed).
+	}
+}
+
+void deleteCard(code card) {
+	int position = compareCards(card);  // check if card is register and at witch position
+	if (position != 0) {
+		int number_of_cards;
+		EEPROM.get(0,number_of_cards);
+		if (position == number_of_cards) {
+			for (int i=((number_of_cards-1)*4+2); i< ((number_of_cards-1)*4+6); i++) {
+				EEPROM.write(i,0);
+				EEPROM.put(0, (number_of_cards-1));
+			}
+		} else {
+			for (int i=((position)*4+2); i< ((number_of_cards-1)*4+6); i++) {
+				byte read_byte;
+				read_byte = EEPROM.read(i);
+				EEPROM.write(i-4, read_byte);
+			}
+			for (int i=((number_of_cards-1)*4+2); i< ((number_of_cards-1)*4+6); i++) {
+				EEPROM.write(i,0);
+			}
+			EEPROM.put(0, (number_of_cards-1));
+		}
 	}
 }
