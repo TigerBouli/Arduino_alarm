@@ -180,12 +180,12 @@ void deleteCard(code card) {
 	if (position != 0) {
 		int number_of_cards;
 		EEPROM.get(0,number_of_cards);
-		if (position == number_of_cards) {
+		if (position == number_of_cards) {  //if the last card - just zero last 4 bytes
 			for (int i=((number_of_cards-1)*4+2); i< ((number_of_cards-1)*4+6); i++) {
 				EEPROM.write(i,0);
 				EEPROM.put(0, (number_of_cards-1));
 			}
-		} else {
+		} else {  //else - rewrite all cards down 4 bytes and delete last 4
 			for (int i=((position)*4+2); i< ((number_of_cards-1)*4+6); i++) {
 				byte read_byte;
 				read_byte = EEPROM.read(i);
