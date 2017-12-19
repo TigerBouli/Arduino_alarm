@@ -1,4 +1,5 @@
 // Do not remove the include below
+
 #include "Alarm.h"
 
 
@@ -9,6 +10,10 @@
 #include <SPI.h>
 #include <MFRC522.h>
 #include <LiquidCrystal.h>
+
+#define LED_R 22
+#define LED_G 24
+#define LED_B 23
 
 //display variable
 LiquidCrystal lcd(8,9,10,11,12,13);
@@ -24,11 +29,11 @@ constexpr uint8_t SS_1_PIN = 53;
 //RFID reader object
 MFRC522 mfrc522;
 
-//variable to stop reading RFID for 2 seconds
-bool switched = true;
+
 
 //timer to reset RFID reading
-Timers <1> budzik;
+Timers <2> budzik;
+
 
 //RFID card structure
 struct code {
@@ -38,8 +43,43 @@ struct code {
 	byte four;
 };
 
+//variable to stop reading RFID for 2 seconds
+bool switched = true;
+//SMS time control variable
+bool sms_trigger = false;
+//SMS sending state variable
+int sms_state = 0;
+//variable triggering display refresh
+bool refresh_display = true;
+//time to arm the alarm
+int time_to_arm = 20;
+//SMS message to send
+String sms_message = "Wykryto karte";
+
+
 //last read card
 code read_card;
+
+//windows states
+bool ok1 = true;
+bool ok2 = true;
+bool ok3 = true;
+
+/*
+ *  Status of the alarm:
+ *  1 - not armed, can be armed
+ *  2 - not armed, cannot be armed (windows open)
+ *  3 - arming
+ *  4 - armed
+ *  5 - armed, power lost
+ *  6 - alert
+ *  7 - door opened, waiting to disarm
+ *  8 - add card
+ *  9 - remove card
+ *
+ */
+
+int state = 1;
 
 
 //Time interrupt funtion to reset RFID reader
@@ -54,9 +94,16 @@ int compareCards(code card);
 bool writeCard(code card);
 //Remove card from memory
 void deleteCard(code card);
+//The procedure to display all data to the user
+void display();
+//SMS send
+void SMS_send(String message);
+
+
+
 
 void setup() {
-	Serial.begin(9600); // Initialize serial communications with the PC
+	Serial.begin(115200); // Initialize serial communications with the PC
 	while (!Serial);    // Do nothing if no serial port is opened (added for Arduinos based on ATMEGA32U4)
 
 	SPI.begin();        // Init SPI bus
@@ -66,7 +113,14 @@ void setup() {
 	Serial.print(F("Reader "));
 	Serial.print(F(": "));
 	mfrc522.PCD_DumpVersionToSerial();
+
+
 	pinMode(buzzer, OUTPUT);  //setup buzzer pin
+	pinMode(LED_R, OUTPUT);
+	pinMode(LED_G, OUTPUT);
+	pinMode(LED_B, OUTPUT);
+
+
 	bip();
 	budzik.attach(0, 2000, reset_switch);  //setup the timer for 2 sec for resetting the RFID reader
 
@@ -76,20 +130,30 @@ void setup() {
 	lcd.setCursor(0, 1);
 	lcd.print("hello World");
 
+	digitalWrite(LED_R, HIGH);
+	digitalWrite(LED_G, HIGH);
+	digitalWrite(LED_B, HIGH);
+
+	display();
+
+	Serial1.begin(115200);
 
 }
 
 void loop() {
 	budzik.process();  //check budzik timer
-	if (mfrc522.PICC_IsNewCardPresent() && switched && mfrc522.PICC_ReadCardSerial() ) { //read RFID card
+//	SMS_tick();
+		if (mfrc522.PICC_IsNewCardPresent() && switched && mfrc522.PICC_ReadCardSerial() ) { //read RFID card
 		bip();  //bip if read
 		switched = false;  //disable next read for 2 sec
 		dump_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size); //write card to local variable
-	//	deleteCard(read_card);
-				int wynik = compareCards(read_card);  //check if card is valid
-				writeCard(read_card);
-		    Serial.println(wynik);
+		//	deleteCard(read_card);
+		int wynik = compareCards(read_card);  //check if card is valid
+		//			writeCard(read_card);
+	//	Serial.println(wynik);
+		SMS_send("Wykryto karte");
 	}
+
 
 }
 
@@ -198,3 +262,85 @@ void deleteCard(code card) {
 		}
 	}
 }
+
+void display() {
+	if (refresh_display) {
+		lcd.clear();
+		lcd.setCursor(0, 0);
+		switch (state) {
+		case 1:
+			lcd.print("Stan alarmu:");
+			lcd.setCursor(0,1);
+			lcd.print("Nie wlaczony");
+			break;
+		case 2:
+			lcd.print("Stan alarmu:");
+			lcd.setCursor(0,1);
+			lcd.print("Nie wlaczony, blad");
+			break;
+		case 3:
+			lcd.print("Stan alarmu:");
+			lcd.setCursor(0,1);
+			lcd.print("Wlaczanie, czas: ");
+			lcd.print(time_to_arm);
+			break;
+		case 4:
+			lcd.print("Stan alarmu:");
+			lcd.setCursor(0,1);
+			lcd.print("Monitorowanie");
+			break;
+		case 5:
+			lcd.print("Stan alarmu:");
+			lcd.setCursor(0,1);
+			lcd.print("Monitorowanie, BP");
+			break;
+		case 6:
+			lcd.print("Stan alarmu:");
+			lcd.setCursor(0,1);
+			lcd.print("Alarm!!!");
+			break;
+		case 7:
+			lcd.print("Stan alarmu:");
+			lcd.setCursor(0,1);
+			lcd.print("Wylaczanie, czas: ");
+			lcd.print(time_to_arm);
+			break;
+		}
+		lcd.setCursor(0,2);
+		lcd.print("OK1:");
+		if (ok1) {
+			lcd.print("Z ");
+		} else {
+			lcd.print("O ");
+		}
+		lcd.print("OK2:");
+		if (ok2) {
+			lcd.print("Z ");
+		} else {
+			lcd.print("O ");
+		}
+
+		lcd.print("OK3:");
+		if (ok3) {
+			lcd.print("Z ");
+		} else {
+			lcd.print("O ");
+		}
+
+	}
+}
+
+void SMS_send(String message) {
+	String numbers[] = {"661880070"};
+	Serial1.println("AT+CMGF=1");
+	delay(500);
+	String numer = "AT+CMGS=\""+numbers[0]+"\"";
+	Serial1.println(numer);
+	delay(500);
+	Serial1.println(message);
+	delay(500);
+	Serial1.write(0x1a);
+
+}
+
+
