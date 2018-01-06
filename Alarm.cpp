@@ -25,13 +25,14 @@ LiquidCrystal lcd(8,9,10,11,12,13);
 //RST5220 pins
 constexpr uint8_t RST_PIN = 5;     // Configurable, see typical pin layout above
 constexpr uint8_t SS_1_PIN = 53;
+constexpr uint8_t IRQ_PIN = 2;
 
 //RFID reader object
-MFRC522 mfrc522;
+MFRC522 mfrc522(SS_1_PIN, RST_PIN);
 
+MFRC522::MIFARE_Key key;
 
-
-//timer to reset RFID reading
+//timer to reset RFID reading and sensor sweep
 Timers <2> budzik;
 
 
@@ -43,12 +44,17 @@ struct code {
 	byte four;
 };
 
+volatile boolean bNewInt = false;
+byte regVal = 0x7F;
+
+
+
 //variable to stop reading RFID for 2 seconds
 bool switched = true;
-//SMS time control variable
-bool sms_trigger = false;
-//SMS sending state variable
-int sms_state = 0;
+//variable to stop sensor reading
+bool sensors_check = true;
+//control variable if valid card was detected
+bool valid_card  = false;
 //variable triggering display refresh
 bool refresh_display = true;
 //time to arm the alarm
@@ -60,10 +66,15 @@ String sms_message = "Wykryto karte";
 //last read card
 code read_card;
 
-//windows states
+//windows and door states
 bool ok1 = true;
 bool ok2 = true;
 bool ok3 = true;
+bool door = false;
+
+//motion sensor states
+bool m1 = true;
+bool m2 = true;
 
 /*
  *  Status of the alarm:
@@ -84,6 +95,8 @@ int state = 1;
 
 //Time interrupt funtion to reset RFID reader
 void reset_switch();
+//Time interrupt to reset sensor sweep
+void reset_sensors_read();
 //Simple buzzer bip function
 void bip();
 //Split read RFID card id into code structure
@@ -98,6 +111,14 @@ void deleteCard(code card);
 void display();
 //SMS send
 void SMS_send(String message);
+//Funtion to check if card is was detected
+void check_card();
+//Funtion to check all the sensors
+void set_card();
+void check_sensors();
+void activateRec(MFRC522 mfrc522);
+void clearInt(MFRC522 mfrc522);
+
 
 
 
@@ -109,7 +130,7 @@ void setup() {
 	SPI.begin();        // Init SPI bus
 
 
-	mfrc522.PCD_Init(SS_1_PIN, RST_PIN); // Init each MFRC522 card
+	mfrc522.PCD_Init(); // Init each MFRC522 card
 	Serial.print(F("Reader "));
 	Serial.print(F(": "));
 	mfrc522.PCD_DumpVersionToSerial();
@@ -123,38 +144,76 @@ void setup() {
 
 	bip();
 	budzik.attach(0, 2000, reset_switch);  //setup the timer for 2 sec for resetting the RFID reader
+	budzik.attach(1, 50, reset_sensors_read); //setup timer for 50 ms sensor read
 
 	lcd.begin(20,4);  //setup LCD as 20x4
-	lcd.setCursor(0, 0);
-	lcd.print("Test");
-	lcd.setCursor(0, 1);
-	lcd.print("hello World");
 
+	//Set led status at start - all are off
 	digitalWrite(LED_R, HIGH);
 	digitalWrite(LED_G, HIGH);
 	digitalWrite(LED_B, HIGH);
+	pinMode(IRQ_PIN, INPUT_PULLUP);
 
 	display();
 
 	Serial1.begin(115200);
+	delay(500);
+	Serial1.println("AT+CMGF=1");
 
+	regVal = 0xA0; //rx irq
+	mfrc522.PCD_WriteRegister(mfrc522.ComIEnReg, regVal);
+
+	bNewInt = false; //interrupt flag
+	attachInterrupt(digitalPinToInterrupt(IRQ_PIN), set_card, FALLING);
+	bNewInt = false; //interrupt flag
 }
 
 void loop() {
-	budzik.process();  //check budzik timer
-//	SMS_tick();
-		if (mfrc522.PICC_IsNewCardPresent() && switched && mfrc522.PICC_ReadCardSerial() ) { //read RFID card
-		bip();  //bip if read
-		switched = false;  //disable next read for 2 sec
-		dump_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size); //write card to local variable
-		//	deleteCard(read_card);
-		int wynik = compareCards(read_card);  //check if card is valid
-		//			writeCard(read_card);
-	//	Serial.println(wynik);
-		SMS_send("Wykryto karte");
+	budzik.process();  //check budzik timers
+	check_card();
+
+	//  delay(100);
+
+	byte znak;
+		if (Serial1.available()) {
+		znak = Serial1.read();
+		Serial.write(znak);
+	}
+	if (Serial.available()) {
+		znak = Serial.read();
+		Serial1.write(znak);
 	}
 
 
+}
+void set_card() {
+	if (switched) {
+		bNewInt = true;
+		switched = false;
+
+	}
+	clearInt(mfrc522);
+	mfrc522.PICC_HaltA();
+}
+
+
+
+void check_card() {
+	if (bNewInt) {
+		 //read RFID card
+			mfrc522.PICC_ReadCardSerial();
+			bip();  //bip if read
+			switched = false;  //disable next read for 2 sec
+			dump_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size); //write card to local variable
+			if (compareCards(read_card) != 0) {
+				valid_card = true;
+			}
+			bNewInt = false;
+	}
+}
+
+void reset_sensors_read() {
+	sensors_check = true;  //just reset control variable
 }
 
 void bip () {
@@ -165,6 +224,7 @@ void bip () {
 
 void reset_switch() {
 	switched = true;
+	activateRec(mfrc522);  //restrigger the reader, important, does not work otherwise
 }
 
 void dump_byte_array(byte *buffer, byte bufferSize) {
@@ -343,4 +403,13 @@ void SMS_send(String message) {
 
 }
 
+void activateRec(MFRC522 mfrc522) {
+	mfrc522.PCD_WriteRegister(mfrc522.FIFODataReg, mfrc522.PICC_CMD_REQA);
+	mfrc522.PCD_WriteRegister(mfrc522.CommandReg, mfrc522.PCD_Transceive);
+	mfrc522.PCD_WriteRegister(mfrc522.BitFramingReg, 0x87);
+}
+
+void clearInt(MFRC522 mfrc522) {
+  mfrc522.PCD_WriteRegister(mfrc522.ComIrqReg, 0x7F);
+}
 
