@@ -11,6 +11,8 @@
 #include <MFRC522.h>
 #include <LiquidCrystal.h>
 
+
+//Three color LED
 #define LED_R 22
 #define LED_G 24
 #define LED_B 23
@@ -45,6 +47,7 @@ struct code {
 	byte four;
 };
 
+//interrupt variable for RFID
 volatile boolean bNewInt = false;
 byte regVal = 0x7F;
 
@@ -62,11 +65,7 @@ bool refresh_display = true;
 int time_to_arm = 20;
 //SMS message to send
 String sms_message = "Wykryto karte";
-bool pir_1 = false;
-bool pir_2 = false;
-bool con_1 = false;
-bool con_2 = false;
-bool con_3 = false;
+
 
 
 
@@ -77,7 +76,7 @@ code read_card;
 bool ok1 = true;
 bool ok2 = true;
 bool ok3 = true;
-bool door = false;
+bool door = true;
 
 //motion sensor states
 bool m1 = true;
@@ -122,8 +121,11 @@ void SMS_send(String message);
 void check_card();
 //Funtion to check all the sensors
 void set_card();
+//check all sensors in one pass
 void check_sensors();
+//technical funtion for RFID reader - activate
 void activateRec(MFRC522 mfrc522);
+//clear RFID interrupt
 void clearInt(MFRC522 mfrc522);
 
 
@@ -144,36 +146,48 @@ void setup() {
 
 
 	pinMode(buzzer, OUTPUT);  //setup buzzer pin
+	//Setup LED's
 	pinMode(LED_R, OUTPUT);
 	pinMode(LED_G, OUTPUT);
 	pinMode(LED_B, OUTPUT);
+	//Setup PIR sensors
 	pinMode(PIR_1, INPUT);
+	// TODO - Setup second PIR
 
+	// TODO - Setup contactrons
 
+    // bip for main setup startup
 	bip();
 	budzik.attach(0, 2000, reset_switch);  //setup the timer for 2 sec for resetting the RFID reader
 	budzik.attach(1, 50, reset_sensors_read); //setup timer for 50 ms sensor read
 
 	lcd.begin(20,4);  //setup LCD as 20x4
 
-	//Set led status at start - all are off
+	//Set led status at start - all are off - HIGH state turns LED off
 	digitalWrite(LED_R, HIGH);
 	digitalWrite(LED_G, HIGH);
 	digitalWrite(LED_B, HIGH);
+	//Setup interrupt PIN for RFID
 	pinMode(IRQ_PIN, INPUT_PULLUP);
+	//attach interrupt to this pin
+	attachInterrupt(digitalPinToInterrupt(IRQ_PIN), set_card, FALLING);
 
+	//initial display
 	display();
 
+	//Initial setup of GPRS modem: TEXT mode for SMS
 	Serial1.begin(115200);
 	delay(500);
 	Serial1.println("AT+CMGF=1");
 
+	// setup RFID sensor to work with interrupts
 	regVal = 0xA0; //rx irq
 	mfrc522.PCD_WriteRegister(mfrc522.ComIEnReg, regVal);
 
 	bNewInt = false; //interrupt flag
-	attachInterrupt(digitalPinToInterrupt(IRQ_PIN), set_card, FALLING);
-	bNewInt = false; //interrupt flag
+
+	//setup finished, alarm ready
+	bip();
 }
 
 void loop() {
@@ -200,21 +214,25 @@ void loop() {
 
 void check_sensors() {
 	if (sensors_check) {
+		//check PIR sensor 1
 	if (digitalRead(PIR_1) == HIGH) {
-		pir_1 = true;
+		m1 = true;
 	} else {
-		pir_1 = false;
+		m1 = false;
 	}
+	//turn off sensor checking for 50ms
 	sensors_check = false;
 	}
 }
 
 void set_card() {
+	//if the timout passed: set the card present tag
 	if (switched) {
 		bNewInt = true;
 		switched = false;
 
 	}
+	//Always reset interrupt and RFID reader to receive the next one
 	clearInt(mfrc522);
 	mfrc522.PICC_HaltA();
 }
@@ -229,9 +247,9 @@ void check_card() {
 			switched = false;  //disable next read for 2 sec
 			dump_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size); //write card to local variable
 			if (compareCards(read_card) != 0) {
-				valid_card = true;
+				valid_card = true;  //setup the variable if card is found
 			}
-			bNewInt = false;
+			bNewInt = false;  //turn off card reading
 	}
 }
 
