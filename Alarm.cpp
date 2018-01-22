@@ -14,6 +14,7 @@
 #define LED_R 22
 #define LED_G 24
 #define LED_B 23
+#define PIR_1 48
 
 //display variable
 LiquidCrystal lcd(8,9,10,11,12,13);
@@ -61,6 +62,12 @@ bool refresh_display = true;
 int time_to_arm = 20;
 //SMS message to send
 String sms_message = "Wykryto karte";
+bool pir_1 = false;
+bool pir_2 = false;
+bool con_1 = false;
+bool con_2 = false;
+bool con_3 = false;
+
 
 
 //last read card
@@ -140,6 +147,7 @@ void setup() {
 	pinMode(LED_R, OUTPUT);
 	pinMode(LED_G, OUTPUT);
 	pinMode(LED_B, OUTPUT);
+	pinMode(PIR_1, INPUT);
 
 
 	bip();
@@ -171,8 +179,11 @@ void setup() {
 void loop() {
 	budzik.process();  //check budzik timers
 	check_card();
+	check_sensors();
 
-	//  delay(100);
+
+
+	  delay(100);
 
 	byte znak;
 		if (Serial1.available()) {
@@ -186,6 +197,18 @@ void loop() {
 
 
 }
+
+void check_sensors() {
+	if (sensors_check) {
+	if (digitalRead(PIR_1) == HIGH) {
+		pir_1 = true;
+	} else {
+		pir_1 = false;
+	}
+	sensors_check = false;
+	}
+}
+
 void set_card() {
 	if (switched) {
 		bNewInt = true;
