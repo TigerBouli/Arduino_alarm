@@ -19,6 +19,10 @@
 //PIR sensors
 #define PIR_1 48
 #define PIR_2 49
+#define OK_1  46
+#define OK_2  47
+#define OK_3  44
+#define DZW_1 45
 
 //display variable
 LiquidCrystal lcd(8,9,10,11,12,13);
@@ -98,7 +102,7 @@ bool m2 = false;
  *
  */
 
-int state = 1;
+int state = 2;
 
 
 //Time interrupt funtion to reset RFID reader
@@ -129,8 +133,7 @@ void check_sensors();
 void activateRec(MFRC522 mfrc522);
 //clear RFID interrupt
 void clearInt(MFRC522 mfrc522);
-//trigger display refresh
-void trigger_display();
+
 //state process funtion to separate code
 void process_state_1();
 void process_state_2();
@@ -167,15 +170,19 @@ void setup() {
 	pinMode(LED_B, OUTPUT);
 	//Setup PIR sensors
 	pinMode(PIR_1, INPUT);
-	// TODO - Setup second PIR
+	pinMode(PIR_2, INPUT);
 
 	// TODO - Setup contactrons
+	pinMode(OK_1, INPUT_PULLUP);
+	pinMode(OK_2, INPUT_PULLUP);
+	pinMode(OK_3, INPUT_PULLUP);
+	pinMode(DZW_1, INPUT_PULLUP);
 
 	// bip for main setup startup
 	bip();
 	budzik.attach(0, 2000, reset_switch);  //setup the timer for 2 sec for resetting the RFID reader
 	budzik.attach(1, 50, reset_sensors_read); //setup timer for 50 ms sensor read
- //   budzik.attach(2, 1000, trigger_display);
+
 
 	lcd.begin(20,4);  //setup LCD as 20x4
 
@@ -253,6 +260,49 @@ void loop() {
 }
 
 void process_state_1() {
+  if (!ok1 || !ok2 || !ok3 || m1 || m2) {
+	  state = 2;
+	  refresh_display = true;
+  }
+  if (valid_card) {
+	  state = 3;
+	  valid_card=false;
+  }
+}
+
+void process_state_2() {
+	if (ok1 && ok2 && ok3 && !m1 && !m2) {
+		state = 1;
+		valid_card = false;
+		refresh_display = true;
+	}
+}
+
+void process_state_3() {
+
+}
+
+void process_state_4() {
+
+}
+
+void process_state_5() {
+
+}
+
+void process_state_6() {
+
+}
+
+void process_state_7() {
+
+}
+
+void process_state_8() {
+
+}
+
+void process_state_9() {
 
 }
 
@@ -272,17 +322,65 @@ void check_sensors() {
 			m1 = false;
 		}
 		//check PIR sensor 2
-				if (digitalRead(PIR_2) == HIGH) {
-					if (!m2) {
-						refresh_display=true;
-					}
-					m2 = true;
-				} else {
-					if (m2) {
-						refresh_display=true;
-					}
-					m2 = false;
-				}
+		if (digitalRead(PIR_2) == HIGH) {
+			if (!m2) {
+				refresh_display=true;
+			}
+			m2 = true;
+		} else {
+			if (m2) {
+				refresh_display=true;
+			}
+			m2 = false;
+		}
+		//Windows 1
+		if (digitalRead(OK_1) == LOW) {
+			if (!ok1) {
+				refresh_display=true;
+			}
+			ok1 = true;
+		} else {
+			if (ok1) {
+				refresh_display=true;
+			}
+			ok1 = false;
+		}
+		//Window 2
+		if (digitalRead(OK_2) == LOW) {
+			if (!ok2) {
+				refresh_display=true;
+			}
+			ok2 = true;
+		} else {
+			if (ok2) {
+				refresh_display=true;
+			}
+			ok2 = false;
+		}
+		//Windows 3
+		if (digitalRead(OK_3) == LOW) {
+			if (!ok3) {
+				refresh_display=true;
+			}
+			ok3 = true;
+		} else {
+			if (ok3) {
+				refresh_display=true;
+			}
+			ok3 = false;
+		}
+		// Door
+		if (digitalRead(DZW_1) == LOW) {
+			if (!door) {
+				refresh_display=true;
+			}
+			door = true;
+		} else {
+			if (door) {
+				refresh_display=true;
+			}
+			door = false;
+		}
 		//turn off sensor checking for 50ms
 		sensors_check = false;
 	}
@@ -490,24 +588,25 @@ void display() {
 		} else {
 			lcd.print("O ");
 		}
-		lcd.print("DZW:");
-		if (door) {
-			lcd.print("Z ");
-		} else {
-			lcd.print("O ");
-		}
+
 		lcd.setCursor(0,3);
-		lcd.print("RUCH1:");
+		lcd.print("CR1:");
 		if (m1) {
 			lcd.print("1 ");
 		} else {
 			lcd.print("0 ");
 		}
-		lcd.print("RUCH2:");
+		lcd.print("CR2:");
 		if (m2) {
 			lcd.print("1 ");
 		} else {
 			lcd.print("0 ");
+		}
+		lcd.print("DZ:");
+		if (door) {
+			lcd.print("Z ");
+		} else {
+			lcd.print("O ");
 		}
 	}
 	refresh_display=false;
