@@ -68,7 +68,7 @@ bool valid_card  = false;
 //variable triggering display refresh
 bool refresh_display = true;
 //time to arm the alarm
-int time_to_arm = 20;
+int time_to_arm = 21;
 //SMS message to send
 String sms_message = "Wykryto karte";
 
@@ -133,6 +133,8 @@ void check_sensors();
 void activateRec(MFRC522 mfrc522);
 //clear RFID interrupt
 void clearInt(MFRC522 mfrc522);
+//timer funtion for arming alarm
+void count_down();
 
 //state process funtion to separate code
 void process_state_1();
@@ -182,6 +184,7 @@ void setup() {
 	bip();
 	budzik.attach(0, 2000, reset_switch);  //setup the timer for 2 sec for resetting the RFID reader
 	budzik.attach(1, 50, reset_sensors_read); //setup timer for 50 ms sensor read
+	budzik.attach(2, 0, count_down);
 
 
 	lcd.begin(20,4);  //setup LCD as 20x4
@@ -260,14 +263,15 @@ void loop() {
 }
 
 void process_state_1() {
-  if (!ok1 || !ok2 || !ok3 || m1 || m2) {
-	  state = 2;
-	  refresh_display = true;
-  }
-  if (valid_card) {
-	  state = 3;
-	  valid_card=false;
-  }
+	if (!ok1 || !ok2 || !ok3 || m1 || m2) {
+		state = 2;
+		refresh_display = true;
+	}
+	if (valid_card) {
+		state = 3;
+		refresh_display = true;
+		valid_card=false;
+	}
 }
 
 void process_state_2() {
@@ -279,7 +283,22 @@ void process_state_2() {
 }
 
 void process_state_3() {
-
+	if (time_to_arm == 21) {
+		time_to_arm=20;
+		budzik.updateInterval(2, 1000);
+	} else if (time_to_arm == 0) {
+		state = 4;
+		refresh_display = 1;
+		time_to_arm =21;
+	} else {
+		if (valid_card) {
+			state = 1;
+			refresh_display = 1;
+			valid_card = false;
+			budzik.updateInterval(2, 0);
+			time_to_arm = 21;
+		}
+	}
 }
 
 void process_state_4() {
@@ -304,6 +323,15 @@ void process_state_8() {
 
 void process_state_9() {
 
+}
+
+void count_down() {
+	if (time_to_arm > 0) {
+		time_to_arm--;
+		refresh_display = 1;
+	} else {
+		budzik.updateInterval(2, 0);
+	}
 }
 
 
@@ -391,7 +419,7 @@ void set_card() {
 	if (switched) {
 		bNewInt = true;
 		switched = false;
-
+		mfrc522.PICC_ReadCardSerial();
 	}
 	//Always reset interrupt and RFID reader to receive the next one
 	clearInt(mfrc522);
@@ -403,7 +431,6 @@ void set_card() {
 void check_card() {
 	if (bNewInt) {
 		//read RFID card
-		mfrc522.PICC_ReadCardSerial();
 		bip();  //bip if read
 		switched = false;  //disable next read for 2 sec
 		dump_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size); //write card to local variable
