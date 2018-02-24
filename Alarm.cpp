@@ -16,7 +16,9 @@
 #define LED_R 22
 #define LED_G 24
 #define LED_B 23
+//PIR sensors
 #define PIR_1 48
+#define PIR_2 49
 
 //display variable
 LiquidCrystal lcd(8,9,10,11,12,13);
@@ -36,7 +38,7 @@ MFRC522 mfrc522(SS_1_PIN, RST_PIN);
 MFRC522::MIFARE_Key key;
 
 //timer to reset RFID reading and sensor sweep
-Timers <2> budzik;
+Timers <3> budzik;
 
 
 //RFID card structure
@@ -79,8 +81,8 @@ bool ok3 = true;
 bool door = true;
 
 //motion sensor states
-bool m1 = true;
-bool m2 = true;
+bool m1 = false;
+bool m2 = false;
 
 /*
  *  Status of the alarm:
@@ -127,6 +129,19 @@ void check_sensors();
 void activateRec(MFRC522 mfrc522);
 //clear RFID interrupt
 void clearInt(MFRC522 mfrc522);
+//trigger display refresh
+void trigger_display();
+//state process funtion to separate code
+void process_state_1();
+void process_state_2();
+void process_state_3();
+void process_state_4();
+void process_state_5();
+void process_state_6();
+void process_state_7();
+void process_state_8();
+void process_state_9();
+
 
 
 
@@ -156,10 +171,11 @@ void setup() {
 
 	// TODO - Setup contactrons
 
-    // bip for main setup startup
+	// bip for main setup startup
 	bip();
 	budzik.attach(0, 2000, reset_switch);  //setup the timer for 2 sec for resetting the RFID reader
 	budzik.attach(1, 50, reset_sensors_read); //setup timer for 50 ms sensor read
+ //   budzik.attach(2, 1000, trigger_display);
 
 	lcd.begin(20,4);  //setup LCD as 20x4
 
@@ -194,34 +210,81 @@ void loop() {
 	budzik.process();  //check budzik timers
 	check_card();
 	check_sensors();
-
-
-
-	  delay(100);
-
-	byte znak;
-		if (Serial1.available()) {
-		znak = Serial1.read();
-		Serial.write(znak);
-	}
-	if (Serial.available()) {
-		znak = Serial.read();
-		Serial1.write(znak);
+	switch (state) {
+	case 1:
+		process_state_1();
+		display();
+		break;
+	case 2:
+		process_state_2();
+		display();
+		break;
+	case 3:
+		process_state_3();
+		display();
+		break;
+	case 4:
+		process_state_4();
+		display();
+		break;
+	case 5:
+		process_state_5();
+		display();
+		break;
+	case 6:
+		process_state_6();
+		display();
+		break;
+	case 7:
+		process_state_7();
+		display();
+		break;
+	case 8:
+		process_state_8();
+		display();
+		break;
+	case 9:
+		process_state_9();
+		display();
+		break;
 	}
 
 
 }
 
+void process_state_1() {
+
+}
+
+
 void check_sensors() {
 	if (sensors_check) {
 		//check PIR sensor 1
-	if (digitalRead(PIR_1) == HIGH) {
-		m1 = true;
-	} else {
-		m1 = false;
-	}
-	//turn off sensor checking for 50ms
-	sensors_check = false;
+		if (digitalRead(PIR_1) == HIGH) {
+			if (!m1) {
+				refresh_display=true;
+			}
+			m1 = true;
+		} else {
+			if (m1) {
+				refresh_display=true;
+			}
+			m1 = false;
+		}
+		//check PIR sensor 2
+				if (digitalRead(PIR_2) == HIGH) {
+					if (!m2) {
+						refresh_display=true;
+					}
+					m2 = true;
+				} else {
+					if (m2) {
+						refresh_display=true;
+					}
+					m2 = false;
+				}
+		//turn off sensor checking for 50ms
+		sensors_check = false;
 	}
 }
 
@@ -241,15 +304,15 @@ void set_card() {
 
 void check_card() {
 	if (bNewInt) {
-		 //read RFID card
-			mfrc522.PICC_ReadCardSerial();
-			bip();  //bip if read
-			switched = false;  //disable next read for 2 sec
-			dump_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size); //write card to local variable
-			if (compareCards(read_card) != 0) {
-				valid_card = true;  //setup the variable if card is found
-			}
-			bNewInt = false;  //turn off card reading
+		//read RFID card
+		mfrc522.PICC_ReadCardSerial();
+		bip();  //bip if read
+		switched = false;  //disable next read for 2 sec
+		dump_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size); //write card to local variable
+		if (compareCards(read_card) != 0) {
+			valid_card = true;  //setup the variable if card is found
+		}
+		bNewInt = false;  //turn off card reading
 	}
 }
 
@@ -427,8 +490,28 @@ void display() {
 		} else {
 			lcd.print("O ");
 		}
-
+		lcd.print("DZW:");
+		if (door) {
+			lcd.print("Z ");
+		} else {
+			lcd.print("O ");
+		}
+		lcd.setCursor(0,3);
+		lcd.print("RUCH1:");
+		if (m1) {
+			lcd.print("1 ");
+		} else {
+			lcd.print("0 ");
+		}
+		lcd.print("RUCH2:");
+		if (m2) {
+			lcd.print("1 ");
+		} else {
+			lcd.print("0 ");
+		}
 	}
+	refresh_display=false;
+
 }
 
 void SMS_send(String message) {
@@ -451,6 +534,6 @@ void activateRec(MFRC522 mfrc522) {
 }
 
 void clearInt(MFRC522 mfrc522) {
-  mfrc522.PCD_WriteRegister(mfrc522.ComIrqReg, 0x7F);
+	mfrc522.PCD_WriteRegister(mfrc522.ComIrqReg, 0x7F);
 }
 
