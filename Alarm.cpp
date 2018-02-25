@@ -42,7 +42,7 @@ MFRC522 mfrc522(SS_1_PIN, RST_PIN);
 MFRC522::MIFARE_Key key;
 
 //timer to reset RFID reading and sensor sweep
-Timers <3> budzik;
+Timers <4> budzik;
 
 
 //RFID card structure
@@ -69,6 +69,9 @@ bool valid_card  = false;
 bool refresh_display = true;
 //time to arm the alarm
 int time_to_arm = 21;
+//LED variables: color and state
+int LED_color;
+bool led_state = 0;
 //SMS message to send
 String sms_message = "Wykryto karte";
 
@@ -135,6 +138,11 @@ void activateRec(MFRC522 mfrc522);
 void clearInt(MFRC522 mfrc522);
 //timer funtion for arming alarm
 void count_down();
+//LED management
+void start_LED_blink();
+void stop_LED_blink();
+void LED_change_state();
+
 
 //state process funtion to separate code
 void process_state_1();
@@ -185,7 +193,7 @@ void setup() {
 	budzik.attach(0, 2000, reset_switch);  //setup the timer for 2 sec for resetting the RFID reader
 	budzik.attach(1, 50, reset_sensors_read); //setup timer for 50 ms sensor read
 	budzik.attach(2, 0, count_down);
-
+	budzik.attach(3, 0, LED_change_state);
 
 	lcd.begin(20,4);  //setup LCD as 20x4
 
@@ -262,8 +270,51 @@ void loop() {
 
 }
 
+void LED_change_state() {
+	switch (LED_color) {
+	case 1:
+		if (led_state) {
+			digitalWrite(LED_R, LOW);
+			led_state = false;
+		} else {
+			digitalWrite(LED_R, HIGH);
+			led_state = true;
+		}
+		break;
+	case 2:
+		if (led_state) {
+			digitalWrite(LED_G, LOW);
+			led_state = false;
+		} else {
+			digitalWrite(LED_R, HIGH);
+			led_state = true;
+		}
+		break;
+	case 3:
+		if (led_state) {
+			digitalWrite(LED_B, LOW);
+			led_state = false;
+		} else {
+			digitalWrite(LED_R, HIGH);
+			led_state = true;
+		}
+		break;
+	}
+}
+
+void start_LED_blink() {
+		budzik.updateInterval(3,500);
+}
+
+void stop_LED_blink() {
+		budzik.updateInterval(3,0);
+		digitalWrite(LED_R, HIGH);
+		digitalWrite(LED_G, HIGH);
+		digitalWrite(LED_B, HIGH);
+}
+
 void process_state_1() {
-	if (!ok1 || !ok2 || !ok3 || m1 || m2) {
+	if (!ok1 || !ok2 || !ok3 ) {
 		state = 2;
 		refresh_display = true;
 	}
@@ -275,7 +326,7 @@ void process_state_1() {
 }
 
 void process_state_2() {
-	if (ok1 && ok2 && ok3 && !m1 && !m2) {
+	if (ok1 && ok2 && ok3 ) {
 		state = 1;
 		valid_card = false;
 		refresh_display = true;
@@ -286,10 +337,15 @@ void process_state_3() {
 	if (time_to_arm == 21) {
 		time_to_arm=20;
 		budzik.updateInterval(2, 1000);
+		LED_color = 1;
+		start_LED_blink();
 	} else if (time_to_arm == 0) {
 		state = 4;
 		refresh_display = 1;
 		time_to_arm =21;
+		stop_LED_blink();
+		digitalWrite(LED_R, LOW);
+		bip();
 	} else {
 		if (valid_card) {
 			state = 1;
