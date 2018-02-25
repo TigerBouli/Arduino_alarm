@@ -10,6 +10,7 @@
 #include <SPI.h>
 #include <MFRC522.h>
 #include <LiquidCrystal.h>
+#include <Keypad.h>
 
 
 //Three color LED
@@ -23,6 +24,21 @@
 #define OK_2  47
 #define OK_3  44
 #define DZW_1 45
+
+//Keyboard connection
+const byte ROWS = 4;
+const byte COLS = 4;
+byte rowPins[ROWS] = {36, 38, 40, 42};
+byte colPins[COLS] = {37, 39, 41, 43};
+
+char keys[ROWS][COLS] = { //Keyboard mapping
+		{'1','2','3','A'},
+		{'4','5','6','B'},
+		{'7','8','9','C'},
+		{'*','0','#','D'}
+};
+
+Keypad keyboard = Keypad( makeKeymap(keys), rowPins, colPins, ROWS, COLS );
 
 //display variable
 LiquidCrystal lcd(8,9,10,11,12,13);
@@ -55,6 +71,8 @@ struct code {
 
 //interrupt variable for RFID
 volatile boolean bNewInt = false;
+
+//register for interval mode setting
 byte regVal = 0x7F;
 
 
@@ -72,14 +90,16 @@ int time_to_arm = 21;
 //LED variables: color and state
 int LED_color;
 bool led_state = 0;
-//SMS message to send
-String sms_message = "Wykryto karte";
+
 
 
 
 
 //last read card
 code read_card;
+
+//last keyboard pressed (X if not pressed after processing)
+char character = 0;
 
 //windows and door states
 bool ok1 = true;
@@ -142,6 +162,8 @@ void count_down();
 void start_LED_blink();
 void stop_LED_blink();
 void LED_change_state();
+//keyboard read
+void read_char_from_keyboard();
 
 
 //state process funtion to separate code
@@ -228,7 +250,8 @@ void loop() {
 	budzik.process();  //check budzik timers
 	check_card();
 	check_sensors();
-	switch (state) {
+	read_char_from_keyboard();
+	switch (state) {  //main loop for states
 	case 1:
 		process_state_1();
 		display();
@@ -270,13 +293,24 @@ void loop() {
 
 }
 
+void read_char_from_keyboard() {
+	//get next key if last key is processed.
+	if (!character) {
+		character = keyboard.getKey();
+	}
+	if (character) {
+		Serial.println(character);
+		character = 0;
+	}
+}
+
 void LED_change_state() {
-	switch (LED_color) {
+	switch (LED_color) {  //decide witch color to blink
 	case 1:
-		if (led_state) {
+		if (led_state) {  //if was off: turn it on
 			digitalWrite(LED_R, LOW);
-			led_state = false;
-		} else {
+			led_state = false;  //write previos state
+		} else {  //else turn it off
 			digitalWrite(LED_R, HIGH);
 			led_state = true;
 		}
@@ -303,22 +337,22 @@ void LED_change_state() {
 }
 
 void start_LED_blink() {
-		budzik.updateInterval(3,500);
+	budzik.updateInterval(3,500);  //turn on timer
 }
 
 void stop_LED_blink() {
-		budzik.updateInterval(3,0);
-		digitalWrite(LED_R, HIGH);
-		digitalWrite(LED_G, HIGH);
-		digitalWrite(LED_B, HIGH);
+	budzik.updateInterval(3,0);  //turn off timer and all the LED's
+	digitalWrite(LED_R, HIGH);
+	digitalWrite(LED_G, HIGH);
+	digitalWrite(LED_B, HIGH);
 }
 
 void process_state_1() {
-	if (!ok1 || !ok2 || !ok3 ) {
+	if (!ok1 || !ok2 || !ok3 ) {  //if some windows are opened, the alarm cannot be armed, state 2
 		state = 2;
 		refresh_display = true;
 	}
-	if (valid_card) {
+	if (valid_card) {  //if card is read, start arming if possible
 		state = 3;
 		refresh_display = true;
 		valid_card=false;
@@ -326,7 +360,7 @@ void process_state_1() {
 }
 
 void process_state_2() {
-	if (ok1 && ok2 && ok3 ) {
+	if (ok1 && ok2 && ok3 ) {  //switch to state 1 if all windows are closed.
 		state = 1;
 		valid_card = false;
 		refresh_display = true;
@@ -334,19 +368,19 @@ void process_state_2() {
 }
 
 void process_state_3() {
-	if (time_to_arm == 21) {
+	if (time_to_arm == 21) {  //starting state: just came to tahe state, setup everything, 20 seconds timer, 1 second interval, start blinking RED LED.
 		time_to_arm=20;
 		budzik.updateInterval(2, 1000);
 		LED_color = 1;
 		start_LED_blink();
-	} else if (time_to_arm == 0) {
+	} else if (time_to_arm == 0) { //timer expired, go to state 4, reset state 3 settings to initial values
 		state = 4;
 		refresh_display = 1;
 		time_to_arm =21;
 		stop_LED_blink();
 		digitalWrite(LED_R, LOW);
 		bip();
-	} else {
+	} else {    //when arming watch for card - if present, abort arming and restore state 3 initial values
 		if (valid_card) {
 			state = 1;
 			refresh_display = 1;

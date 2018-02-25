@@ -17,7 +17,9 @@ Alarm.cpp.o: ../Alarm.cpp ../Alarm.h \
  /Applications/sloeber.app/Contents/Eclipse/arduinoPlugin/libraries/MFRC522/1.3.6/src/require_cpp11.h \
  /Applications/sloeber.app/Contents/Eclipse/arduinoPlugin/libraries/MFRC522/1.3.6/src/deprecated.h \
  /Applications/sloeber.app/Contents/Eclipse/arduinoPlugin/libraries/LiquidCrystal/1.0.6/src/LiquidCrystal.h \
- /Applications/sloeber.app/Contents/Eclipse/arduinoPlugin/packages/arduino/hardware/avr/1.6.19/cores/arduino/Print.h
+ /Applications/sloeber.app/Contents/Eclipse/arduinoPlugin/packages/arduino/hardware/avr/1.6.19/cores/arduino/Print.h \
+ /Applications/sloeber.app/Contents/Eclipse/arduinoPlugin/libraries/Keypad/3.1.1/src/Keypad.h \
+ /Applications/sloeber.app/Contents/Eclipse/arduinoPlugin/libraries/Keypad/3.1.1/src/Key.h
 
 ../Alarm.h:
 
@@ -58,3 +60,7 @@ Alarm.cpp.o: ../Alarm.cpp ../Alarm.h \
 /Applications/sloeber.app/Contents/Eclipse/arduinoPlugin/libraries/LiquidCrystal/1.0.6/src/LiquidCrystal.h:
 
 /Applications/sloeber.app/Contents/Eclipse/arduinoPlugin/packages/arduino/hardware/avr/1.6.19/cores/arduino/Print.h:
+
+/Applications/sloeber.app/Contents/Eclipse/arduinoPlugin/libraries/Keypad/3.1.1/src/Keypad.h:
+
+/Applications/sloeber.app/Contents/Eclipse/arduinoPlugin/libraries/Keypad/3.1.1/src/Key.h:
